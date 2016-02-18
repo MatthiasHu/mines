@@ -2,11 +2,13 @@
 
 
 import Graphics.Gloss
+import Graphics.Gloss.Interface.Pure.Game
 import Data.Array
 import Control.Lens
 import Control.Lens.TH
 import Control.Monad
 import Control.Monad.Random
+import Control.Monad.State
 import Data.Monoid ((<>))
 
 
@@ -23,22 +25,42 @@ data CellState = CellState
 makeLenses ''CellState
 
 
-blankBoard :: Ind -> Board
-blankBoard size = listArray ((1, 1), size) $ repeat $ CellState False False
-
-
-main :: IO ()
-main = startBoard dimens 50 >>=
-  display (InWindow "hi" (over both (*cellScale) dimens) (0, 0)) black
-  . boardPic
-  where dimens = (20, 10)
-
 cellScale :: (Num a) => a
 cellScale = 50
 
 
+main :: IO ()
+main = do
+  board <- startBoard dimens 50
+  play
+    (InWindow "hi" (over both (*cellScale) dimens) (0, 0))
+    black
+    30
+    board
+    boardPic
+    handleEvent
+    (const id)
+  where dimens = (20, 10)
+
+handleEvent :: Event -> Board -> Board
+handleEvent (EventKey (MouseButton LeftButton) Down _ (x, y)) =
+  handleClick (x, y)
+handleEvent _ = id
+
+handleClick :: (Float, Float) -> Board -> Board
+handleClick (x0, y0) = execState $ do
+  bounds <- use (to bounds)
+  let (ctx, cty) = centeringTranslation bounds
+      (x, y) = over both ((+1) . floor . (/cellScale)) (x0-ctx, y0-cty)
+  when (inRange bounds (x, y)) $
+    ix (x, y) . open .= True
+
+
 startBoard :: MonadRandom m => Ind -> Int -> m Board
 startBoard size mines = mines `timesM` addMine $ blankBoard size
+
+blankBoard :: Ind -> Board
+blankBoard size = listArray ((1, 1), size) $ repeat $ CellState False False
 
 addMine :: MonadRandom m => Board -> m Board
 addMine board = do
@@ -59,7 +81,7 @@ randomIndex ((x0, y0), (x1, y1)) = do
 
 
 boardPic :: Board -> Picture
-boardPic board = translate (-w*0.5*cellScale) (-h*0.5*cellScale) $
+boardPic board = uncurry translate (centeringTranslation $ bounds board) $
   pictures
     [ translate (cellScale * fromIntegral (x-1))
                 (cellScale * fromIntegral (y-1))
@@ -69,6 +91,10 @@ boardPic board = translate (-w*0.5*cellScale) (-h*0.5*cellScale) $
   where
     (w, h) = over both fromIntegral $ snd $ bounds board
     borders = color black $ line [(0, 0), (1, 0)] <> line [(0, 0), (0, 1)]
+
+centeringTranslation :: (Ind, Ind) -> (Float, Float)
+centeringTranslation =
+  over both ((*(-0.5*cellScale)) . fromIntegral) . snd
 
 cellPic :: CellState -> Picture
 cellPic s | s ^. open . to not  = color (greyN 0.5) $ polygon cellPath
