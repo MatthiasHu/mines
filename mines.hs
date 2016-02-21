@@ -9,7 +9,7 @@ import Control.Lens.TH
 import Control.Monad
 import Control.Monad.Random
 import Control.Monad.State
-import Data.Monoid ((<>))
+import Data.Monoid ((<>), Any(..), getAny)
 
 
 
@@ -20,6 +20,7 @@ type Board = Array Ind CellState
 data CellState = CellState
   { _open :: Bool
   , _mine :: Bool
+  , _neighbourMines :: Int
   }
 
 makeLenses ''CellState
@@ -57,11 +58,14 @@ handleClick (x0, y0) = execState $ do
 
 
 startBoard :: MonadRandom m => Ind -> Int -> m Board
-startBoard size mines = mines `timesM` addMine $ blankBoard size
+startBoard size mines = do
+  b <- mines `timesM` addMine $ blankBoard size
+  return $ validateNeighbourMines b
 
 blankBoard :: Ind -> Board
-blankBoard size = listArray ((1, 1), size) $ repeat $ CellState False False
+blankBoard size = listArray ((1, 1), size) $ repeat $ CellState False False 0
 
+-- add a mine, leaving neighbourMines invalid
 addMine :: MonadRandom m => Board -> m Board
 addMine board = do
   i <- randomIndex $ bounds board
@@ -79,6 +83,26 @@ randomIndex ((x0, y0), (x1, y1)) = do
   y <- getRandomR (y0, y1)
   return (x, y)
 
+validateNeighbourMines :: Board -> Board
+validateNeighbourMines board =
+  array (bounds board)
+    [ (i, cs & neighbourMines .~ actualNeighbourMines board i)
+    | (i, cs) <- assocs board ]
+
+actualNeighbourMines :: Board -> Ind -> Int
+actualNeighbourMines board =
+  length . filter (\i -> getAny $ board ^. ix i . mine . to Any)
+  . neighbours
+
+neighbours :: Ind -> [Ind]
+neighbours (x, y) = do
+  dx <- [-1, 0, 1]
+  dy <- [-1, 0, 1]
+  guard $ dx /= 0 || dy /= 0
+  return (x+dx, y+dy)
+
+
+-- output
 
 boardPic :: Board -> Picture
 boardPic board = uncurry translate (centeringTranslation $ bounds board) $
@@ -99,10 +123,14 @@ centeringTranslation =
 cellPic :: CellState -> Picture
 cellPic s | s ^. open . to not  = color (greyN 0.5) $ polygon cellPath
           | s ^. mine  = color red $ polygon minePath
-          | otherwise  = blank
+          | otherwise  = color white . numberPic $ s ^. neighbourMines
 
 cellPath :: Path
 cellPath = [(0, 0), (0, 1), (1, 1), (1, 0)]
 
 minePath :: Path
 minePath = [(0.5, 0.2), (0.2, 0.5), (0.5, 0.8), (0.8, 0.5)]
+
+numberPic :: Int -> Picture
+numberPic n = translate 0.3 0.2 . scale s s . text $ show n
+  where s = 0.005
