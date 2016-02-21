@@ -25,6 +25,13 @@ data CellState = CellState
 
 makeLenses ''CellState
 
+data GameState = GameState
+  { _board :: Board
+  , _alive :: Bool
+  }
+
+makeLenses ''GameState
+
 
 cellScale :: (Num a) => a
 cellScale = 50
@@ -32,29 +39,46 @@ cellScale = 50
 
 main :: IO ()
 main = do
-  board <- startBoard dimens 50
+  board0 <- startBoard dimens 50
   play
     (InWindow "hi" (over both (*cellScale) dimens) (0, 0))
     black
     30
-    board
+    (GameState board0 True)
     boardPic
-    handleEvent
+    (guardAlive . handleEvent)
     (const id)
   where dimens = (20, 10)
 
-handleEvent :: Event -> Board -> Board
-handleEvent (EventKey (MouseButton LeftButton) Down _ (x, y)) =
-  handleClick (x, y)
+handleEvent :: Event -> GameState -> GameState
+handleEvent (EventKey (MouseButton button) Down _ (x, y)) =
+  handleClick button (x, y)
 handleEvent _ = id
 
-handleClick :: (Float, Float) -> Board -> Board
-handleClick (x0, y0) = execState $ do
-  bounds <- use (to bounds)
+guardAlive :: (GameState -> GameState) -> GameState -> GameState
+guardAlive f gs | gs ^. alive  = f gs
+                | otherwise    = gs
+
+handleClick :: MouseButton -> (Float, Float) -> GameState -> GameState
+handleClick button (x0, y0) = execState $ do
+  bounds <- use (board . to bounds)
   let (ctx, cty) = centeringTranslation bounds
       (x, y) = over both ((+1) . floor . (/cellScale)) (x0-ctx, y0-cty)
-  when (inRange bounds (x, y)) $
-    ix (x, y) . open .= True
+      (validButton, mineExpected) = case button of
+        LeftButton  -> (True, False)
+        RightButton -> (True, True)
+        _           -> (False, False)
+  when (validButton && inRange bounds (x, y)) $
+    openCell mineExpected (x, y)
+
+openCell :: Bool -> Ind -> State GameState ()
+openCell mineExpected i = do
+  closedCell <- use $ board . ix i . open . to not . to Any
+  when (getAny closedCell) $ do
+    board . ix i . open .= True
+    mine <- use $ board . ix i . mine . to Any
+    when (getAny mine /= mineExpected) $
+      alive .= False
 
 
 startBoard :: MonadRandom m => Ind -> Int -> m Board
@@ -104,17 +128,22 @@ neighbours (x, y) = do
 
 -- output
 
-boardPic :: Board -> Picture
-boardPic board = uncurry translate (centeringTranslation $ bounds board) $
+boardPic :: GameState -> Picture
+boardPic gs = uncurry translate (centeringTranslation $ bounds b) $
   pictures
     [ translate (cellScale * fromIntegral (x-1))
                 (cellScale * fromIntegral (y-1))
       . scale cellScale cellScale $
       cellPic s <> borders
-    | ((x, y), s) <- assocs board ]
+    | ((x, y), s) <- assocs b]
   where
-    (w, h) = over both fromIntegral $ snd $ bounds board
-    borders = color black $ line [(0, 0), (1, 0)] <> line [(0, 0), (0, 1)]
+    b = gs ^. board
+    (w, h) = over both fromIntegral $ snd $ bounds b
+    borders = color bordersColor $
+      line [(0, 0), (1, 0)] <> line [(0, 0), (0, 1)]
+    bordersColor = case gs ^. alive of
+      True  -> black
+      False -> red
 
 centeringTranslation :: (Ind, Ind) -> (Float, Float)
 centeringTranslation =
