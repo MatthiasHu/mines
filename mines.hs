@@ -4,6 +4,7 @@
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Pure.Game
 import Data.Array
+import qualified Data.Set as Set
 import Control.Lens
 import Control.Lens.TH
 import Control.Monad
@@ -68,8 +69,9 @@ handleClick button (x0, y0) = execState $ do
         LeftButton  -> (True, False)
         RightButton -> (True, True)
         _           -> (False, False)
-  when (validButton && inRange bounds (x, y)) $
+  when (validButton && inRange bounds (x, y)) $ do
     openCell mineExpected (x, y)
+    modify $ guardAlive (over board openAllEasyNoMines)
 
 openCell :: Bool -> Ind -> State GameState ()
 openCell mineExpected i = do
@@ -124,6 +126,33 @@ neighbours (x, y) = do
   dy <- [-1, 0, 1]
   guard $ dx /= 0 || dy /= 0
   return (x+dx, y+dy)
+
+
+-- automated easy moves
+
+easyNoMines :: Board -> Set.Set Ind
+easyNoMines b = Set.fromList $ do
+  i0 <- range $ bounds b
+  guard $ getAny $ b ^. ix i0 . open . to Any
+  guard $ not . getAny $ b ^. ix i0 . mine . to Any
+  guard $ b ! i0 ^. neighbourMines == openNeighbourMines b i0
+  i1 <- neighbours i0
+  guard $ getAny $ b ^. ix i1 . open . to not . to Any
+  return i1
+
+openNeighbourMines :: Board -> Ind -> Int
+openNeighbourMines board =
+  length . filter (\i -> getAny $ board ^. ix i . (to openMine) . to Any)
+  . neighbours
+  where openMine cs = cs ^. open && cs ^. mine
+
+openAllEasyNoMines :: Board -> Board
+openAllEasyNoMines b
+  | Set.null enm = b
+  | otherwise    = openAllEasyNoMines $ Set.fold setOpen b enm
+  where
+    enm = easyNoMines b
+    setOpen i b' = b' & ix i . open .~ True
 
 
 -- output
