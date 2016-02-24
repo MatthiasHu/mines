@@ -54,6 +54,8 @@ main = do
 handleEvent :: Event -> GameState -> GameState
 handleEvent (EventKey (MouseButton button) Down _ (x, y)) =
   handleClick button (x, y)
+handleEvent (EventKey (Char 'm') Down _ _) =
+  guardAlive (over board $ openAll easyNoMines . openAll easyMines)
 handleEvent _ = id
 
 guardAlive :: (GameState -> GameState) -> GameState -> GameState
@@ -137,6 +139,17 @@ easyNoMines b = Set.fromList $ do
   guard $ not . getAny $ b ^. ix i0 . mine . to Any
   let openMine cs = cs ^. open && cs ^. mine in
     guard $ b ! i0 ^. neighbourMines == neighbourCells openMine b i0
+  i1 <- neighbours i0
+  guard $ getAny $ b ^. ix i1 . open . to not . to Any
+  return i1
+
+easyMines :: Board -> Set.Set Ind
+easyMines b = Set.fromList $ do
+  i0 <- range $ bounds b
+  guard $ getAny $ b ^. ix i0 . open . to Any
+  guard $ not . getAny $ b ^. ix i0 . mine . to Any
+  let closedOrMine cs = not (cs ^. open) || cs ^. mine in
+    guard $ b ! i0 ^. neighbourMines == neighbourCells closedOrMine b i0
   i1 <- neighbours i0
   guard $ getAny $ b ^. ix i1 . open . to not . to Any
   return i1
