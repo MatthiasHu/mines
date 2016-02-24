@@ -29,6 +29,7 @@ makeLenses ''CellState
 data GameState = GameState
   { _board :: Board
   , _alive :: Bool
+  , _rng   :: StdGen
   }
 
 makeLenses ''GameState
@@ -37,25 +38,31 @@ makeLenses ''GameState
 cellScale :: (Num a) => a
 cellScale = 50
 
+boardDimens = (20, 10)
+
+numMines = 50
+
 
 main :: IO ()
 main = do
-  board0 <- startBoard dimens 40
+  board0 <- startBoard boardDimens numMines
+  newRNG <- newStdGen
   play
-    (InWindow "hi" (over both (*cellScale) dimens) (0, 0))
+    (InWindow "hi" (over both (*cellScale) boardDimens) (0, 0))
     black
     30
-    (GameState board0 True)
+    (GameState board0 True newRNG)
     boardPic
-    (guardAlive . handleEvent)
+    handleEvent
     (const id)
-  where dimens = (20, 10)
 
 handleEvent :: Event -> GameState -> GameState
 handleEvent (EventKey (MouseButton button) Down _ (x, y)) =
-  handleClick button (x, y)
+  guardAlive $ handleClick button (x, y)
 handleEvent (EventKey (Char 'm') Down _ _) =
-  guardAlive (over board $ openAll easyNoMines . openAll easyMines)
+  guardAlive $ over board $ openAll easyNoMines . openAll easyMines
+handleEvent (EventKey (SpecialKey KeySpace) Down _ _) =
+  newGame
 handleEvent _ = id
 
 guardAlive :: (GameState -> GameState) -> GameState -> GameState
@@ -84,6 +91,12 @@ openCell mineExpected i = do
     when (getAny mine /= mineExpected) $
       alive .= False
 
+
+-- use the rng to make a new board configuration
+newGame :: GameState -> GameState
+newGame gs = GameState board True newRNG
+  where
+    (board, newRNG) = runRand (startBoard boardDimens numMines) (gs ^. rng)
 
 startBoard :: MonadRandom m => Ind -> Int -> m Board
 startBoard size mines = do
