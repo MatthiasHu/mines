@@ -71,7 +71,7 @@ handleClick button (x0, y0) = execState $ do
         _           -> (False, False)
   when (validButton && inRange bounds (x, y)) $ do
     openCell mineExpected (x, y)
-    modify $ guardAlive (over board openAllEasyNoMines)
+    modify $ guardAlive (over board $ openAll easyNoMines)
 
 openCell :: Bool -> Ind -> State GameState ()
 openCell mineExpected i = do
@@ -141,12 +141,12 @@ easyNoMines b = Set.fromList $ do
   guard $ getAny $ b ^. ix i1 . open . to not . to Any
   return i1
 
-openAllEasyNoMines :: Board -> Board
-openAllEasyNoMines b
-  | Set.null enm = b
-  | otherwise    = openAllEasyNoMines $ Set.fold setOpen b enm
+openAll :: (Board -> Set.Set Ind) -> Board -> Board
+openAll finder b
+  | Set.null found = b
+  | otherwise      = openAll finder $ Set.fold setOpen b found
   where
-    enm = easyNoMines b
+    found = finder b
     setOpen i b' = b' & ix i . open .~ True
 
 
