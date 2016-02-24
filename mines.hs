@@ -112,12 +112,12 @@ randomIndex ((x0, y0), (x1, y1)) = do
 validateNeighbourMines :: Board -> Board
 validateNeighbourMines board =
   array (bounds board)
-    [ (i, cs & neighbourMines .~ actualNeighbourMines board i)
+    [ (i, cs & neighbourMines .~ neighbourCells (^. mine) board i)
     | (i, cs) <- assocs board ]
 
-actualNeighbourMines :: Board -> Ind -> Int
-actualNeighbourMines board =
-  length . filter (\i -> getAny $ board ^. ix i . mine . to Any)
+neighbourCells :: (CellState -> Bool) -> Board -> Ind -> Int
+neighbourCells p board =
+  length . filter (\i -> getAny $ board ^. ix i . (to p) . to Any)
   . neighbours
 
 neighbours :: Ind -> [Ind]
@@ -135,16 +135,11 @@ easyNoMines b = Set.fromList $ do
   i0 <- range $ bounds b
   guard $ getAny $ b ^. ix i0 . open . to Any
   guard $ not . getAny $ b ^. ix i0 . mine . to Any
-  guard $ b ! i0 ^. neighbourMines == neighbourOpenMines b i0
+  let openMine cs = cs ^. open && cs ^. mine in
+    guard $ b ! i0 ^. neighbourMines == neighbourCells openMine b i0
   i1 <- neighbours i0
   guard $ getAny $ b ^. ix i1 . open . to not . to Any
   return i1
-
-neighbourOpenMines :: Board -> Ind -> Int
-neighbourOpenMines board =
-  length . filter (\i -> getAny $ board ^. ix i . (to openMine) . to Any)
-  . neighbours
-  where openMine cs = cs ^. open && cs ^. mine
 
 openAllEasyNoMines :: Board -> Board
 openAllEasyNoMines b
