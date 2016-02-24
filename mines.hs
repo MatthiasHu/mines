@@ -135,13 +135,13 @@ easyNoMines b = Set.fromList $ do
   i0 <- range $ bounds b
   guard $ getAny $ b ^. ix i0 . open . to Any
   guard $ not . getAny $ b ^. ix i0 . mine . to Any
-  guard $ b ! i0 ^. neighbourMines == openNeighbourMines b i0
+  guard $ b ! i0 ^. neighbourMines == neighbourOpenMines b i0
   i1 <- neighbours i0
   guard $ getAny $ b ^. ix i1 . open . to not . to Any
   return i1
 
-openNeighbourMines :: Board -> Ind -> Int
-openNeighbourMines board =
+neighbourOpenMines :: Board -> Ind -> Int
+neighbourOpenMines board =
   length . filter (\i -> getAny $ board ^. ix i . (to openMine) . to Any)
   . neighbours
   where openMine cs = cs ^. open && cs ^. mine
