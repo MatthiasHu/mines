@@ -40,7 +40,7 @@ cellScale = 50
 
 main :: IO ()
 main = do
-  board0 <- startBoard dimens 50
+  board0 <- startBoard dimens 40
   play
     (InWindow "hi" (over both (*cellScale) dimens) (0, 0))
     black
