@@ -171,7 +171,7 @@ boardPic gs = uncurry translate (centeringTranslation $ bounds b) $
     borders = color bordersColor $
       line [(0, 0), (1, 0)] <> line [(0, 0), (0, 1)]
     bordersColor = case gs ^. alive of
-      True  -> black
+      True  -> greyN 0.2
       False -> red
 
 centeringTranslation :: (Ind, Ind) -> (Float, Float)
